@@ -62,6 +62,12 @@ func (n *network) deleteEndpoint(eid string) {
 	n.Unlock()
 }
 
+func (n *network) setBridge(bridge *bridgeInterface) {
+	n.Lock()
+	defer n.Unlock()
+	n.bridge = bridge
+}
+
 func (n *network) getEndpoint(eid string) (*endpoint, error) {
 	n.Lock()
 	defer n.Unlock()

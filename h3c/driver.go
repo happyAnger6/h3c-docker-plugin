@@ -121,8 +121,8 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 	if err != nil {
 		return err
 	}
-	network.bridge = bridgeIface
 
+	n.bridge = bridgeIface
 	setupDevice(bridgeIface)
 	d.addNetwork(n)
 	return nil
