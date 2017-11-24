@@ -12,6 +12,7 @@ import (
 type network struct {
 	name	  string
 	id        string
+	bridge    *bridgeInterface
 	endpoints endpointTable
 	gateway   string
 	ifaceOpt  string

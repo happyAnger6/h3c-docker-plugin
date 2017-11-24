@@ -10,6 +10,8 @@ import (
 	sdk "github.com/docker/go-plugins-helpers/network"
 	"github.com/vishvananda/netlink"
 	"github.com/docker/docker/client"
+	"github.com/docker/libnetwork/netlabel"
+	"github.com/h3c-docker-plugin/h3c"
 )
 
 const (
@@ -35,6 +37,7 @@ type Driver struct {
 	dClient *client.Client
 	networks networkTable
 	nameserver string
+	nlh *netlink.Handle
 	sync.Mutex
 }
 
@@ -65,8 +68,18 @@ func truncateID(id string) string {
 func getBridgeName(r *sdk.CreateNetworkRequest) (string, error) {
 	bridgeName := bridgePrefix + truncateID(r.NetworkID)
 	if r.Options != nil {
-		if name, ok := r.Options[bridgeNameOption].(string); ok {
-			bridgeName = name
+		// Parse docker network -o opts
+		for k, v := range r.Options {
+			if k == netlabel.GenericData {
+				if genericOpts, ok := v.(map[string]interface{}); ok {
+					for key, val := range genericOpts {
+						// Parse -o bridgeNameOption from libnetwork generic opts
+						if key == bridgeNameOption {
+							bridgeName = val.(string)
+						}
+					}
+				}
+			}
 		}
 	}
 	return bridgeName, nil
@@ -96,23 +109,22 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 
 	bName, err := getBridgeName(r)
 	log.Debugf("bridgeName:%v", bName)
-	
-	// Parse docker network -o opts
-	for k, v := range r.Options {
-		log.Debugf("Options k:%v v:%v ", k, v)
-		if k == "com.docker.network.generic" {
-			if genericOpts, ok := v.(map[string]interface{}); ok {
-				for key, val := range genericOpts {
-					log.Debugf("Libnetwork Opts Sent: [ %s ] Value: [ %s ]", key, val)
-					// Parse -o host_iface from libnetwork generic opts
-					if key == "bridgeName" {
-						n.name = val.(string)
-					}
-				}
-			}
-		}
+
+	// Initialize handle when needed
+	d.Lock()
+	if d.nlh == nil {
+		d.nlh = h3c.NlHandle()
 	}
-	log.Debugf("addNetwork:%v ", *n)
+	d.Unlock()
+
+	// Create or retrieve the bridge L3 interface
+	bridgeIface, err := newInterface(d.nlh, bName)
+	if err != nil {
+		return err
+	}
+	network.bridge = bridgeIface
+
+	setupDevice(bridgeIface)
 	d.addNetwork(n)
 	return nil
 }

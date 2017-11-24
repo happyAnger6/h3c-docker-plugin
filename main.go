@@ -6,7 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/codegangsta/cli"
 	"github.com/docker/go-plugins-helpers/network"
-	"h3c-docker-plugin/h3c"
+	"github.com/h3c-docker-plugin/h3c"
 )
 
 const (
