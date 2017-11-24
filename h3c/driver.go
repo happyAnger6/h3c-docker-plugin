@@ -66,18 +66,19 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 	// Parse docker network -o opts
 	for k, v := range r.Options {
 		log.Debugf("Options k:%v v:%v ", k, v)
-		if k == "com.docker.sdk.generic" {
+		if k == "com.docker.network.generic" {
 			if genericOpts, ok := v.(map[string]interface{}); ok {
 				for key, val := range genericOpts {
 					log.Debugf("Libnetwork Opts Sent: [ %s ] Value: [ %s ]", key, val)
 					// Parse -o host_iface from libnetwork generic opts
-					if key == "host_iface" {
-						n.ifaceOpt = val.(string)
+					if key == "bridgeName" {
+						n.name = val.(string)
 					}
 				}
 			}
 		}
 	}
+	log.Debugf("addNetwork:%v ", n)
 	d.addNetwork(n)
 	return nil
 }
