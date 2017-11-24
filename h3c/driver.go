@@ -86,6 +86,8 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 // DeleteNetwork deletes a network
 func (d *Driver) DeleteNetwork(r *sdk.DeleteNetworkRequest) error {
 	log.Debugf("Delete network request: %+v", &r)
+	network := d.network(r.NetworkID)
+	log.Debugf("Delete network name: %v", network.name)
 	d.deleteNetwork(r.NetworkID)
 	return nil
 }
