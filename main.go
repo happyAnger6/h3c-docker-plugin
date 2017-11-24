@@ -3,14 +3,15 @@ package main
 import (
 	"os"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/codegangsta/cli"
 	"github.com/docker/go-plugins-helpers/network"
-	"macvlan-docker-plugin/macvlan"
+	"h3c-docker-plugin/h3c"
 )
 
 const (
 	version = "0.0.1"
+	pluginName = "h3c-docker-network"
 )
 
 func main() {
@@ -20,8 +21,8 @@ func main() {
 		Usage: "enable debugging",
 	}
 	app := cli.NewApp()
-	app.Name = "macvlan"
-	app.Usage = "Docker Macvlan Networking"
+	app.Name = "h3c-docker-network"
+	app.Usage = "h3c Docker Networking"
 	app.Version = version
 	app.Flags = []cli.Flag{
 		flagDebug,
@@ -36,10 +37,10 @@ func Run(ctx *cli.Context) {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	d, err := macvlan.NewDriver(version, ctx)
+	d, err := h3c.NewDriver(version, ctx)
 	if err != nil {
 		panic(err)
 	}
 	h := network.NewHandler(d)
-	h.ServeUnix("root", 0)
+	h.ServeUnix(pluginName, 0)
 }
