@@ -11,6 +11,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/docker/docker/client"
 	"github.com/docker/libnetwork/netlabel"
+	"github.com/vishvananda/netns"
 )
 
 const (
@@ -176,10 +177,29 @@ func (d *Driver) EndpointInfo(r *sdk.InfoRequest) (*sdk.InfoResponse, error) {
 func (d *Driver) Join(r *sdk.JoinRequest) (*sdk.JoinResponse, error) {
 	log.Debugf("Join request: %+v", &r)
 
+	key := r.SandboxKey
+	sbNs, err := netns.GetFromPath(key)
+	if err != nil {
+		log.Fatalf("Failed to get network namespace path %q: %v", key, err)
+	}
+	defer sbNs.Close()
+
+	nh, err := netlink.NewHandleAt(sbNs)
+	if err != nil {
+		log.Fatalf("Failed to get network namespace handle :%v", err)
+	}
+
+	bridgeIface, err := newInterface(nh, "br_ibc_0_1_0")
+	if err != nil {
+		log.Fatalf("Failed to create newInterface :%v", err)
+	}
+
+	setupDevice(bridgeIface)
+
 	res := &sdk.JoinResponse{
 	}
 	log.Debugf("Join response: %+v", res)
-	log.Debugf("Join endpoint %s:%s to %s", r.NetworkID, r.EndpointID, r.SandboxKey)
+	log.Debugf("Join endpoint %s:%s to %s options:%v", r.NetworkID, r.EndpointID, r.SandboxKey, r.Options)
 	return res, nil
 }
 
