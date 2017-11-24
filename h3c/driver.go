@@ -11,7 +11,6 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/docker/docker/client"
 	"github.com/docker/libnetwork/netlabel"
-	"github.com/h3c-docker-plugin/h3c"
 )
 
 const (
