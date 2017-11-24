@@ -94,7 +94,9 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 		gateway:   netGw,
 	}
 
-	log.Debugf("bridgeName:%v",getBridgeName(r))
+	bName, err := getBridgeName(r)
+	log.Debugf("bridgeName:%v", bName)
+	
 	// Parse docker network -o opts
 	for k, v := range r.Options {
 		log.Debugf("Options k:%v v:%v ", k, v)
