@@ -10,6 +10,7 @@ import (
 )
 
 type network struct {
+	name	  string
 	id        string
 	endpoints endpointTable
 	gateway   string
