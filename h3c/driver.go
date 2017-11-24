@@ -12,6 +12,23 @@ import (
 	"github.com/docker/docker/client"
 )
 
+const (
+	defaultRoute     = "0.0.0.0/0"
+	bridgePrefix     = "h3cbr-"
+	containerEthName = "eth"
+
+	mtuOption           = "net.h3c.bridge.mtu"
+	modeOption          = "net.h3c.bridge.mode"
+	bridgeNameOption    = "net.h3c.bridge.name"
+	bindInterfaceOption = "net.h3c.bridge.bind_interface"
+
+	modeNAT  = "nat"
+	modeFlat = "flat"
+
+	defaultMTU  = 1500
+	defaultMode = modeNAT
+)
+
 // Driver is the MACVLAN Driver
 type Driver struct {
 	sdk.Driver
@@ -41,6 +58,20 @@ func (d *Driver) GetCapabilities() (*sdk.CapabilitiesResponse, error) {
 	return scope, nil
 }
 
+func truncateID(id string) string {
+	return id[:5]
+}
+
+func getBridgeName(r *sdk.CreateNetworkRequest) (string, error) {
+	bridgeName := bridgePrefix + truncateID(r.NetworkID)
+	if r.Options != nil {
+		if name, ok := r.Options[bridgeNameOption].(string); ok {
+			bridgeName = name
+		}
+	}
+	return bridgeName, nil
+}
+
 // CreateNetwork creates a new h3c network
 // bridge name should in options
 func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
@@ -63,6 +94,7 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 		gateway:   netGw,
 	}
 
+	log.Debugf("bridgeName:%v",getBridgeName(r))
 	// Parse docker network -o opts
 	for k, v := range r.Options {
 		log.Debugf("Options k:%v v:%v ", k, v)
