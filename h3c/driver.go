@@ -113,7 +113,7 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 	// Initialize handle when needed
 	d.Lock()
 	if d.nlh == nil {
-		d.nlh = h3c.NlHandle()
+		d.nlh = NlHandle()
 	}
 	d.Unlock()
 
