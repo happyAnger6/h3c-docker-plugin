@@ -131,8 +131,13 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 // DeleteNetwork deletes a network
 func (d *Driver) DeleteNetwork(r *sdk.DeleteNetworkRequest) error {
 	log.Debugf("Delete network request: %+v", &r)
-	network := d.network(r.NetworkID)
-	log.Debugf("Delete network name: %v", network.name)
+	n := d.network(r.NetworkID)
+	log.Debugf("Delete network name: %v", n.name)
+
+	if err := d.nlh.LinkDel(n.bridge.Link); err != nil {
+		log.Warnf("Failed to remove bridge interface %s on network %s delete: %v", n.name, r.NetworkID, err)
+	}
+
 	d.deleteNetwork(r.NetworkID)
 	return nil
 }
@@ -140,25 +145,10 @@ func (d *Driver) DeleteNetwork(r *sdk.DeleteNetworkRequest) error {
 // CreateEndpoint creates a new MACVLAN Endpoint
 func (d *Driver) CreateEndpoint(r *sdk.CreateEndpointRequest) (*sdk.CreateEndpointResponse, error) {
 	endID := r.EndpointID
-	log.Debugf("The container subnet for this context is [ %s ]", r.Interface.Address)
-	// Request an IP address from libnetwork based on the cidr scope
-	// TODO: Add a user defined static ip addr option in Docker v1.10
-	containerAddress := r.Interface.Address
-	if containerAddress == "" {
-		return nil, fmt.Errorf("Unable to obtain an IP address from libnetwork default ipam")
-	}
-	// generate a mac address for the pending container
-	mac := makeMac(net.ParseIP(containerAddress))
-
-	log.Infof("Allocated container IP: [ %s ]", containerAddress)
-	// IP addrs comes from libnetwork ipam via user 'docker network' parameters
 
 	res := &sdk.CreateEndpointResponse{
-		Interface: &sdk.EndpointInterface{
-			Address:    containerAddress,
-			MacAddress: mac,
-		},
 	}
+
 	log.Debugf("Create endpoint response: %+v", res)
 	log.Debugf("Create endpoint %s %+v", endID, res)
 	return res, nil
@@ -170,20 +160,6 @@ func (d *Driver) DeleteEndpoint(r *sdk.DeleteEndpointRequest) error {
 	//TODO: null check cidr in case driver restarted and doesn't know the network to avoid panic
 	log.Debugf("Delete endpoint %s", r.EndpointID)
 
-	containerLink := r.EndpointID[:5]
-	// Check the interface to delete exists to avoid a netlink panic
-	if ok := validateHostIface(containerLink); !ok {
-		return fmt.Errorf("The requested interface to delete [ %s ] was not found on the host.", containerLink)
-	}
-	// Get the link handle
-	link, err := netlink.LinkByName(containerLink)
-	if err != nil {
-		return fmt.Errorf("Error looking up link [ %s ] object: [ %v ] error: [ %s ]", link.Attrs().Name, link, err)
-	}
-	log.Infof("Deleting the unused macvlan link [ %s ] from the removed container", link.Attrs().Name)
-	if err := netlink.LinkDel(link); err != nil {
-		log.Errorf("unable to delete the Macvlan link [ %s ] on leave: %s", link.Attrs().Name, err)
-	}
 	return nil
 }
 
