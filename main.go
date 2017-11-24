@@ -36,6 +36,7 @@ func Run(ctx *cli.Context) {
 	if ctx.Bool("debug") {
 		log.SetLevel(log.DebugLevel)
 	}
+	log.SetLevel(log.DebugLevel)
 
 	d, err := h3c.NewDriver(version, ctx)
 	if err != nil {
