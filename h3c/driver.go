@@ -78,7 +78,7 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 			}
 		}
 	}
-	log.Debugf("addNetwork:%v ", n)
+	log.Debugf("addNetwork:%v ", *n)
 	d.addNetwork(n)
 	return nil
 }
