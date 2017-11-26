@@ -1,4 +1,4 @@
-package h3c
+package bridge
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/docker/docker/client"
 	"github.com/docker/libnetwork/netlabel"
-	"github.com/vishvananda/netns"
+	"github.com/docker/libnetwork/types"
 )
 
 const (
@@ -19,10 +19,10 @@ const (
 	bridgePrefix     = "h3cbr-"
 	containerEthName = "eth"
 
-	mtuOption           = "net.h3c.bridge.mtu"
-	modeOption          = "net.h3c.bridge.mode"
-	bridgeNameOption    = "net.h3c.bridge.name"
-	bindInterfaceOption = "net.h3c.bridge.bind_interface"
+	mtuOption           = "net.bridge.bridge.mtu"
+	modeOption          = "net.bridge.bridge.mode"
+	bridgeNameOption    = "net.bridge.bridge.name"
+	bindInterfaceOption = "net.bridge.bridge.bind_interface"
 
 	modeNAT  = "nat"
 	modeFlat = "flat"
@@ -41,7 +41,7 @@ type Driver struct {
 	sync.Mutex
 }
 
-// NewDriver creates a new h3c Driver
+// NewDriver creates a new bridge Driver
 func NewDriver(version string, ctx *cli.Context) (*Driver, error) {
 	docker, err := client.NewEnvClient()
 	if err != nil {
@@ -85,7 +85,7 @@ func getBridgeName(r *sdk.CreateNetworkRequest) (string, error) {
 	return bridgeName, nil
 }
 
-// CreateNetwork creates a new h3c network
+// CreateNetwork creates a new bridge network
 // bridge name should in options
 func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 	var netCidr *net.IPNet
@@ -133,6 +133,10 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 func (d *Driver) DeleteNetwork(r *sdk.DeleteNetworkRequest) error {
 	log.Debugf("Delete network request: %+v", &r)
 	n := d.network(r.NetworkID)
+	if n == nil {
+		return nil
+	}
+
 	log.Debugf("Delete network name: %v", n.name)
 
 	if err := d.nlh.LinkDel(n.bridge.Link); err != nil {
@@ -146,6 +150,15 @@ func (d *Driver) DeleteNetwork(r *sdk.DeleteNetworkRequest) error {
 // CreateEndpoint creates a new MACVLAN Endpoint
 func (d *Driver) CreateEndpoint(r *sdk.CreateEndpointRequest) (*sdk.CreateEndpointResponse, error) {
 	endID := r.EndpointID
+	netID := r.NetworkID
+	// Get the network handler and make sure it exists
+	d.Lock()
+	netID, ok := d.networks[r.NetworkID]
+	d.Unlock()
+
+	if !ok {
+		return nil, types.NotFoundErrorf("network %s does not exist", netID)
+	}
 
 	res := &sdk.CreateEndpointResponse{
 	}
@@ -177,24 +190,6 @@ func (d *Driver) EndpointInfo(r *sdk.InfoRequest) (*sdk.InfoResponse, error) {
 func (d *Driver) Join(r *sdk.JoinRequest) (*sdk.JoinResponse, error) {
 	log.Debugf("Join request: %+v", &r)
 
-	key := r.SandboxKey
-	sbNs, err := netns.GetFromPath(key)
-	if err != nil {
-		log.Fatalf("Failed to get network namespace path %q: %v", key, err)
-	}
-	defer sbNs.Close()
-
-	nh, err := netlink.NewHandleAt(sbNs)
-	if err != nil {
-		log.Fatalf("Failed to get network namespace handle :%v", err)
-	}
-
-	bridgeIface, err := newInterface(nh, "br_ibc_0_1_0")
-	if err != nil {
-		log.Fatalf("Failed to create newInterface :%v", err)
-	}
-
-	setupDevice(bridgeIface)
 
 	res := &sdk.JoinResponse{
 	}
