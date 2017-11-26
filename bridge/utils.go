@@ -4,8 +4,7 @@ import (
 	"net"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/docker/libnetwork/ns"
-	"github.com/vishvananda/netlink/netns"
+	"github.com/vishvananda/netns"
 	"github.com/vishvananda/netlink"
 )
 
