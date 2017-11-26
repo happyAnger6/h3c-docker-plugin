@@ -22,7 +22,7 @@ func main() {
 		Usage: "enable debugging",
 	}
 	app := cli.NewApp()
-	app.Name = "bridge-docker-network"
+	app.Name = "h3c-bridge-network"
 	app.Usage = "bridge Docker Networking"
 	app.Version = version
 	app.Flags = []cli.Flag{
