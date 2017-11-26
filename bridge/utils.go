@@ -1,9 +1,12 @@
-package h3c
+package bridge
 
 import (
 	"net"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/docker/libnetwork/ns"
+	"github.com/vishvananda/netlink/netns"
+	"github.com/vishvananda/netlink"
 )
 
 // Generate a mac addr
@@ -23,4 +26,19 @@ func validateHostIface(ifaceStr string) bool {
 		return false
 	}
 	return true
+}
+
+func getNsFromSandboxKey(key string) (*netlink.Handle, error){
+	sbNs, err := netns.GetFromPath(key)
+	if err != nil {
+		log.Fatalf("Failed to get network namespace path %q: %v", key, err)
+	}
+	defer sbNs.Close()
+
+	nh, err := netlink.NewHandleAt(sbNs)
+	if err != nil {
+		log.Fatalf("Failed to get network namespace handle :%v", err)
+	}
+
+	return nh, err
 }
