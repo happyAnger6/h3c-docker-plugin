@@ -7,12 +7,11 @@ import (
 	"github.com/codegangsta/cli"
 	"github.com/docker/go-plugins-helpers/network"
 	"github.com/h3c-docker-plugin/bridge"
-	"github.com/h3c-docker-plugin/h3c"
 )
 
 const (
 	version = "0.0.1"
-	pluginName = "bridge-docker-network"
+	pluginName = "h3c-bridge-network"
 )
 
 func main() {
@@ -22,7 +21,7 @@ func main() {
 		Usage: "enable debugging",
 	}
 	app := cli.NewApp()
-	app.Name = "h3c-bridge-network"
+	app.Name = pluginName
 	app.Usage = "bridge Docker Networking"
 	app.Version = version
 	app.Flags = []cli.Flag{
