@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/netutils"
 )
 
 const (
@@ -151,13 +152,124 @@ func (d *Driver) DeleteNetwork(r *sdk.DeleteNetworkRequest) error {
 func (d *Driver) CreateEndpoint(r *sdk.CreateEndpointRequest) (*sdk.CreateEndpointResponse, error) {
 	endID := r.EndpointID
 	netID := r.NetworkID
+
 	// Get the network handler and make sure it exists
 	d.Lock()
-	netID, ok := d.networks[r.NetworkID]
+	network, ok := d.networks[r.NetworkID]
 	d.Unlock()
 
 	if !ok {
 		return nil, types.NotFoundErrorf("network %s does not exist", netID)
+	}
+
+	// Try to convert the options to endpoint configuration
+	epConfig, err := parseEndpointOptions(r.Options)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create and add the endpoint
+	network.Lock()
+	endpoint := &bridgeEndpoint{id: endID, nid: netID, config: epConfig}
+	network.endpoints[endID] = endpoint
+	network.Unlock()
+
+	// On failure make sure to remove the endpoint
+	defer func() {
+		if err != nil {
+			network.Lock()
+			delete(network.endpoints, endID)
+			network.Unlock()
+		}
+	}()
+
+	// Generate a name for what will be the host side pipe interface
+	hostIfName, err := netutils.GenerateIfaceName(d.nlh, vethPrefix, vethLen)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate a name for what will be the sandbox side pipe interface
+	containerIfName, err := netutils.GenerateIfaceName(d.nlh, vethPrefix, vethLen)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate and add the interface pipe host <-> sandbox
+	veth := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0},
+		PeerName:  containerIfName}
+	if err = d.nlh.LinkAdd(veth); err != nil {
+		return nil, types.InternalErrorf("failed to add the host (%s) <=> sandbox (%s) pair interfaces: %v", hostIfName, containerIfName, err)
+	}
+
+	// Get the host side pipe interface handler
+	host, err := d.nlh.LinkByName(hostIfName)
+	if err != nil {
+		return types.InternalErrorf("failed to find host side interface %s: %v", hostIfName, err)
+	}
+	defer func() {
+		if err != nil {
+			d.nlh.LinkDel(host)
+		}
+	}()
+
+	// Get the sandbox side pipe interface handler
+	sbox, err := d.nlh.LinkByName(containerIfName)
+	if err != nil {
+		return types.InternalErrorf("failed to find sandbox side interface %s: %v", containerIfName, err)
+	}
+	defer func() {
+		if err != nil {
+			d.nlh.LinkDel(sbox)
+		}
+	}()
+
+	network.Lock()
+	config := network.config
+	network.Unlock()
+
+	// Add bridge inherited attributes to pipe interfaces
+	if config.Mtu != 0 {
+		err = d.nlh.LinkSetMTU(host, config.Mtu)
+		if err != nil {
+			return types.InternalErrorf("failed to set MTU on host interface %s: %v", hostIfName, err)
+		}
+		err = d.nlh.LinkSetMTU(sbox, config.Mtu)
+		if err != nil {
+			return types.InternalErrorf("failed to set MTU on sandbox interface %s: %v", containerIfName, err)
+		}
+	}
+
+	// Attach host side pipe interface into the bridge
+	if err = addToBridge(d.nlh, hostIfName, config.BridgeName); err != nil {
+		return fmt.Errorf("adding interface %s to bridge %s failed: %v", hostIfName, config.BridgeName, err)
+	}
+
+	if !dconfig.EnableUserlandProxy {
+		err = setHairpinMode(d.nlh, host, true)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Store the sandbox side pipe interface parameters
+	endpoint.srcName = containerIfName
+	endpoint.macAddress = ifInfo.MacAddress()
+	endpoint.addr = ifInfo.Address()
+	endpoint.addrv6 = ifInfo.AddressIPv6()
+
+	// Set the sbox's MAC if not provided. If specified, use the one configured by user, otherwise generate one based on IP.
+	if endpoint.macAddress == nil {
+		endpoint.macAddress = electMacAddress(epConfig, endpoint.addr.IP)
+		if err = ifInfo.SetMacAddress(endpoint.macAddress); err != nil {
+			return err
+		}
+	}
+
+	// Up the host interface after finishing all netlink configuration
+	if err = d.nlh.LinkSetUp(host); err != nil {
+		return fmt.Errorf("could not set link up for host interface %s: %v", hostIfName, err)
 	}
 
 	res := &sdk.CreateEndpointResponse{

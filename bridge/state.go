@@ -13,6 +13,7 @@ type network struct {
 	name	  string
 	id        string
 	bridge    *bridgeInterface
+	config    *networkConfiguration
 	endpoints endpointTable
 	gateway   string
 	ifaceOpt  string
@@ -30,7 +31,7 @@ type endpoint struct {
 	srcName string
 }
 
-type endpointTable map[string]*endpoint
+type endpointTable map[string]*bridgeEndpoint
 
 func (d *Driver) getNetwork(id string) (*network, error) {
 	d.Lock()
