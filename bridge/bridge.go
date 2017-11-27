@@ -24,6 +24,7 @@ type ifaceCreator int8
 type networkConfiguration struct {
 	ID                   string
 	BridgeName           string
+	ContainerIfName      string
 	EnableIPv6           bool
 	EnableIPMasquerade   bool
 	EnableICC            bool

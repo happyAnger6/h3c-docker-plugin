@@ -88,7 +88,7 @@ func getBridgeName(r *sdk.CreateNetworkRequest) (string, error) {
 	return bridgeName, nil
 }
 
-func (d *Driver) getContainerIfName(r *sdk.CreateEndpointRequest) (string, error) {
+func (d *Driver) getContainerIfName(r *sdk.CreateNetworkRequest) (string, error) {
 	// Generate a name for what will be the sandbox side pipe interface
 	containerIfName, err := netutils.GenerateIfaceName(d.nlh, vethPrefix, vethLen)
 	if err != nil {
@@ -133,6 +133,14 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 	if err != nil {
 		return err
 	}
+
+	// Generate a name for what will be the sandbox side pipe interface
+	containerIfName, err := d.getContainerIfName(r)
+	if err != nil {
+		return err
+	}
+	log.Debugf("containerIfName:%v", containerIfName)
+	config.ContainerIfName = containerIfName
 
 	n := &network{
 		id:        r.NetworkID,
@@ -226,11 +234,7 @@ func (d *Driver) CreateEndpoint(r *sdk.CreateEndpointRequest) (*sdk.CreateEndpoi
 	}
 
 	// Generate a name for what will be the sandbox side pipe interface
-	containerIfName, err := d.getContainerIfName(r)
-	if err != nil {
-		return nil, err
-	}
-	log.Debugf("netID:%v endpointId:%V containerIfname: %v", netID, endID, containerIfName)
+	containerIfName := network.config.ContainerIfName
 
 	// Generate and add the interface pipe host <-> sandbox
 	veth := &netlink.Veth{
