@@ -143,6 +143,7 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 	}
 
 	bName, err := getBridgeName(r)
+	config.BridgeName = bName
 	log.Debugf("bridgeName:%v", bName)
 
 	// Initialize handle when needed
