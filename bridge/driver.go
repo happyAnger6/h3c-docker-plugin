@@ -17,6 +17,7 @@ import (
 
 const (
 	defaultRoute     = "0.0.0.0/0"
+	defaultChannelName   = "ibc"
 	bridgePrefix     = "h3cbr-"
 	containerEthName = "eth"
 
@@ -86,6 +87,24 @@ func getBridgeName(r *sdk.CreateNetworkRequest) (string, error) {
 	return bridgeName, nil
 }
 
+func (d *Driver) getContainerIfName(r *sdk.CreateEndpointRequest) (string, error) {
+	// Generate a name for what will be the sandbox side pipe interface
+	containerIfName, err := netutils.GenerateIfaceName(d.nlh, vethPrefix, vethLen)
+	if err != nil {
+		return defaultChannelName, err
+	}
+
+	if r.Options != nil {
+		// Parse docker network -o opts
+		for k, v := range r.Options {
+			if k == ChannelType {
+				containerIfName = v.(string)
+			}
+		}
+	}
+	return containerIfName, nil
+}
+
 // CreateNetwork creates a new bridge network
 // bridge name should in options
 func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
@@ -101,8 +120,15 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 		}
 	}
 
+	// Parse and validate the config. It should not be conflict with existing networks' config
+	config, err := parseNetworkOptions(r.NetworkID, r.Options)
+	if err != nil {
+		return err
+	}
+
 	n := &network{
 		id:        r.NetworkID,
+		config:    config,
 		endpoints: endpointTable{},
 		cidr:      netCidr,
 		gateway:   netGw,
@@ -152,6 +178,7 @@ func (d *Driver) DeleteNetwork(r *sdk.DeleteNetworkRequest) error {
 func (d *Driver) CreateEndpoint(r *sdk.CreateEndpointRequest) (*sdk.CreateEndpointResponse, error) {
 	endID := r.EndpointID
 	netID := r.NetworkID
+	eInfo := r.Interface
 
 	// Get the network handler and make sure it exists
 	d.Lock()
@@ -190,10 +217,11 @@ func (d *Driver) CreateEndpoint(r *sdk.CreateEndpointRequest) (*sdk.CreateEndpoi
 	}
 
 	// Generate a name for what will be the sandbox side pipe interface
-	containerIfName, err := netutils.GenerateIfaceName(d.nlh, vethPrefix, vethLen)
+	containerIfName, err := d.getContainerIfName(r)
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("netID:%v endpointId:%V containerIfname: %v", netID, endID, containerIfName)
 
 	// Generate and add the interface pipe host <-> sandbox
 	veth := &netlink.Veth{
@@ -206,7 +234,7 @@ func (d *Driver) CreateEndpoint(r *sdk.CreateEndpointRequest) (*sdk.CreateEndpoi
 	// Get the host side pipe interface handler
 	host, err := d.nlh.LinkByName(hostIfName)
 	if err != nil {
-		return types.InternalErrorf("failed to find host side interface %s: %v", hostIfName, err)
+		return nil, types.InternalErrorf("failed to find host side interface %s: %v", hostIfName, err)
 	}
 	defer func() {
 		if err != nil {
@@ -217,7 +245,7 @@ func (d *Driver) CreateEndpoint(r *sdk.CreateEndpointRequest) (*sdk.CreateEndpoi
 	// Get the sandbox side pipe interface handler
 	sbox, err := d.nlh.LinkByName(containerIfName)
 	if err != nil {
-		return types.InternalErrorf("failed to find sandbox side interface %s: %v", containerIfName, err)
+		return nil, types.InternalErrorf("failed to find sandbox side interface %s: %v", containerIfName, err)
 	}
 	defer func() {
 		if err != nil {
@@ -233,46 +261,35 @@ func (d *Driver) CreateEndpoint(r *sdk.CreateEndpointRequest) (*sdk.CreateEndpoi
 	if config.Mtu != 0 {
 		err = d.nlh.LinkSetMTU(host, config.Mtu)
 		if err != nil {
-			return types.InternalErrorf("failed to set MTU on host interface %s: %v", hostIfName, err)
+			return nil, types.InternalErrorf("failed to set MTU on host interface %s: %v", hostIfName, err)
 		}
 		err = d.nlh.LinkSetMTU(sbox, config.Mtu)
 		if err != nil {
-			return types.InternalErrorf("failed to set MTU on sandbox interface %s: %v", containerIfName, err)
+			return nil, types.InternalErrorf("failed to set MTU on sandbox interface %s: %v", containerIfName, err)
 		}
 	}
 
 	// Attach host side pipe interface into the bridge
 	if err = addToBridge(d.nlh, hostIfName, config.BridgeName); err != nil {
-		return fmt.Errorf("adding interface %s to bridge %s failed: %v", hostIfName, config.BridgeName, err)
-	}
-
-	if !dconfig.EnableUserlandProxy {
-		err = setHairpinMode(d.nlh, host, true)
-		if err != nil {
-			return err
-		}
+		return nil, fmt.Errorf("adding interface %s to bridge %s failed: %v", hostIfName, config.BridgeName, err)
 	}
 
 	// Store the sandbox side pipe interface parameters
 	endpoint.srcName = containerIfName
-	endpoint.macAddress = ifInfo.MacAddress()
-	endpoint.addr = ifInfo.Address()
-	endpoint.addrv6 = ifInfo.AddressIPv6()
-
-	// Set the sbox's MAC if not provided. If specified, use the one configured by user, otherwise generate one based on IP.
-	if endpoint.macAddress == nil {
-		endpoint.macAddress = electMacAddress(epConfig, endpoint.addr.IP)
-		if err = ifInfo.SetMacAddress(endpoint.macAddress); err != nil {
-			return err
-		}
-	}
+	endpoint.macAddress = eInfo.MacAddress
+	endpoint.addr = eInfo.Address
+	endpoint.addrv6 = eInfo.AddressIPv6
 
 	// Up the host interface after finishing all netlink configuration
 	if err = d.nlh.LinkSetUp(host); err != nil {
-		return fmt.Errorf("could not set link up for host interface %s: %v", hostIfName, err)
+		return nil, fmt.Errorf("could not set link up for host interface %s: %v", hostIfName, err)
 	}
 
 	res := &sdk.CreateEndpointResponse{
+		Interface: &sdk.EndpointInterface{
+			Address:    endpoint.addr,
+			MacAddress: endpoint.macAddress,
+		},
 	}
 
 	log.Debugf("Create endpoint response: %+v", res)
