@@ -45,13 +45,13 @@ func (d *Driver) getNetwork(id string) (*network, error) {
 	return nil, types.NotFoundErrorf("network not found: %s", id)
 }
 
-func (n *network) endpoint(eid string) *endpoint {
+func (n *network) endpoint(eid string) *bridgeEndpoint {
 	n.Lock()
 	defer n.Unlock()
 	return n.endpoints[eid]
 }
 
-func (n *network) addEndpoint(ep *endpoint) {
+func (n *network) addEndpoint(ep *bridgeEndpoint) {
 	n.Lock()
 	n.endpoints[ep.id] = ep
 	n.Unlock()
@@ -69,7 +69,7 @@ func (n *network) setBridge(bridge *bridgeInterface) {
 	n.bridge = bridge
 }
 
-func (n *network) getEndpoint(eid string) (*endpoint, error) {
+func (n *network) getEndpoint(eid string) (*bridgeEndpoint, error) {
 	n.Lock()
 	defer n.Unlock()
 	if eid == "" {

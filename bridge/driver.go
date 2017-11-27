@@ -13,6 +13,7 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/types"
 	"github.com/docker/libnetwork/netutils"
+	"github.com/docker/libnetwork/driverapi"
 )
 
 const (
@@ -303,6 +304,61 @@ func (d *Driver) DeleteEndpoint(r *sdk.DeleteEndpointRequest) error {
 	//TODO: null check cidr in case driver restarted and doesn't know the network to avoid panic
 	log.Debugf("Delete endpoint %s", r.EndpointID)
 
+	nid := r.NetworkID
+	eid := r.EndpointID
+
+	// Get the network handler and make sure it exists
+	d.Lock()
+	n, ok := d.networks[nid]
+	d.Unlock()
+
+	if !ok {
+		return types.InternalMaskableErrorf("network %s does not exist", nid)
+	}
+	if n == nil {
+		return driverapi.ErrNoNetwork(nid)
+	}
+
+	// Sanity Check
+	n.Lock()
+	if n.id != nid {
+		n.Unlock()
+		return InvalidNetworkIDError(nid)
+	}
+	n.Unlock()
+
+	// Check endpoint id and if an endpoint is actually there
+	ep, err := n.getEndpoint(eid)
+	if err != nil {
+		return err
+	}
+	if ep == nil {
+		return EndpointNotFoundError(eid)
+	}
+
+	// Remove it
+	n.Lock()
+	delete(n.endpoints, eid)
+	n.Unlock()
+
+	// On failure make sure to set back ep in n.endpoints, but only
+	// if it hasn't been taken over already by some other thread.
+	defer func() {
+		if err != nil {
+			n.Lock()
+			if _, ok := n.endpoints[eid]; !ok {
+				n.endpoints[eid] = ep
+			}
+			n.Unlock()
+		}
+	}()
+
+	// Try removal of link. Discard error: it is a best effort.
+	// Also make sure defer does not see this error either.
+	if link, err := d.nlh.LinkByName(ep.srcName); err == nil {
+		d.nlh.LinkDel(link)
+	}
+
 	return nil
 }
 
@@ -318,10 +374,33 @@ func (d *Driver) EndpointInfo(r *sdk.InfoRequest) (*sdk.InfoResponse, error) {
 // Join creates a MACVLAN interface to be moved to the container netns
 func (d *Driver) Join(r *sdk.JoinRequest) (*sdk.JoinResponse, error) {
 	log.Debugf("Join request: %+v", &r)
+	nid := r.NetworkID
+	eid := r.EndpointID
 
+	d.Lock()
+	network, ok := d.networks[nid]
+	d.Unlock()
+
+	if !ok {
+		return nil, types.NotFoundErrorf("network %s does not exist", nid)
+	}
+
+	network.Lock()
+	endpoint, ok := network.endpoints[eid]
+	network.Unlock()
+
+	if !ok {
+		return nil, types.NotFoundErrorf("endpoint %s does not exist", eid)
+	}
 
 	res := &sdk.JoinResponse{
+		InterfaceName: sdk.InterfaceName{
+			SrcName:   endpoint.srcName,
+		},
+		Gateway: d.networks[r.NetworkID].gateway,
+		DisableGatewayService: true,
 	}
+
 	log.Debugf("Join response: %+v", res)
 	log.Debugf("Join endpoint %s:%s to %s options:%v", r.NetworkID, r.EndpointID, r.SandboxKey, r.Options)
 	return res, nil
