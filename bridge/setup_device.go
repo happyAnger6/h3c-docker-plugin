@@ -42,3 +42,20 @@ func setupDevice(i *bridgeInterface) error {
 	}
 	return err
 }
+
+// SetupDeviceUp ups the given bridge interface.
+func setupDeviceUp(config *networkConfiguration, i *bridgeInterface) error {
+	err := i.nlh.LinkSetUp(i.Link)
+	if err != nil {
+		return fmt.Errorf("Failed to set link up for %s: %v", config.BridgeName, err)
+	}
+
+	// Attempt to update the bridge interface to refresh the flags status,
+	// ignoring any failure to do so.
+	if lnk, err := i.nlh.LinkByName(config.BridgeName); err == nil {
+		i.Link = lnk
+	} else {
+		logrus.Warnf("Failed to retrieve link for interface (%s): %v", config.BridgeName, err)
+	}
+	return nil
+}
