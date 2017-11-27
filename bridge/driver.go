@@ -408,6 +408,7 @@ func (d *Driver) Join(r *sdk.JoinRequest) (*sdk.JoinResponse, error) {
 	res := &sdk.JoinResponse{
 		InterfaceName: sdk.InterfaceName{
 			SrcName:   endpoint.srcName,
+			DstPrefix: endpoint.srcName,
 		},
 		Gateway: d.networks[r.NetworkID].gateway,
 		DisableGatewayService: true,
