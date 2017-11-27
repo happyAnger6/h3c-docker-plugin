@@ -187,7 +187,7 @@ func (d *Driver) CreateEndpoint(r *sdk.CreateEndpointRequest) (*sdk.CreateEndpoi
 	endID := r.EndpointID
 	netID := r.NetworkID
 	eInfo := r.Interface
-
+	log.Debugf("CreateEndpoint called :%v", r)
 	// Get the network handler and make sure it exists
 	d.Lock()
 	network, ok := d.networks[r.NetworkID]
