@@ -24,7 +24,7 @@ const (
 
 	mtuOption           = "net.bridge.bridge.mtu"
 	modeOption          = "net.bridge.bridge.mode"
-	bridgeNameOption    = "net.bridge.bridge.name"
+	bridgeNameOption    = "net.h3c.bridge.name"
 	bindInterfaceOption = "net.bridge.bridge.bind_interface"
 
 	modeNAT  = "nat"
@@ -98,8 +98,15 @@ func (d *Driver) getContainerIfName(r *sdk.CreateEndpointRequest) (string, error
 	if r.Options != nil {
 		// Parse docker network -o opts
 		for k, v := range r.Options {
-			if k == ChannelType {
-				containerIfName = v.(string)
+			if k == netlabel.GenericData {
+				if genericOpts, ok := v.(map[string]interface{}); ok {
+					for key, val := range genericOpts {
+						// Parse -o bridgeNameOption from libnetwork generic opts
+						if key == ChannelType {
+							containerIfName = val.(string)
+						}
+					}
+				}
 			}
 		}
 	}
