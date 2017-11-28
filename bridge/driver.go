@@ -170,7 +170,7 @@ func (d *Driver) CreateNetwork(r *sdk.CreateNetworkRequest) error {
 	n.bridge = bridgeIface
 	setupDevice(bridgeIface)
 	setupDeviceUp(config, bridgeIface)
-	
+
 	d.addNetwork(n)
 	return nil
 }
