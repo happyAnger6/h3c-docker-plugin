@@ -1,0 +1,28 @@
+改变HTML内容
+document.getElementById(id).innerHTML=new HTML
+
+改变属性
+document.getElementById(id).attribute=new value
+
+改变样式
+document.getElementById(id).style.property=new style
+
+改变自己
+<h1 onclick="this.innerHTML='谢谢!'">请点击该文本</h1>
+
+function changetext(id)
+{
+id.innerHTML="谢谢!";
+}
+</script>
+</head>
+<body>
+<h1 onclick="changetext(this)">请点击该文本</h1>
+
+
+为元素分配事件
+<script>
+document.getElementById("myBtn").onclick=function(){displayDate()};
+</script>
+
+
